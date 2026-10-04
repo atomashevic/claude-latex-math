@@ -1,30 +1,47 @@
 import type { EngineInterface, Register } from 'claude-code'
 
+import { overflow } from './cache'
 import { blocks } from './flow'
 import type { Block, Item, Token } from './flow'
 import { fit, hexColour, keyOf, segments } from './math'
 import type { Cells } from './math'
-import { inline } from './unicode'
+import { readSettings } from './settings'
+import type { Settings } from './settings'
+import { decide } from './terminal'
+import type { Drawing, Terminal } from './terminal'
+import { asText, inline, inlineMath } from './unicode'
 
 type Mode = 'display' | 'inline'
 /** One piece of a reply, top to bottom: a block of its text, or a display formula between two. */
 type Piece = Block | { kind: 'display'; tex: string; source: string }
-type Formula = { status: 'ready'; path: string; cells: Cells } | { status: 'failed'; reason: string }
+/** `png` holds the picture's bytes, base64, when the terminal cannot read this machine's files. */
+type Formula = { status: 'ready'; path: string; cells: Cells; png?: string } | { status: 'failed'; reason: string }
 
 // The transcript indents a reply's text by two columns, after its bullet.
 const INDENT = 2
 // How long a colour read stands, so a theme change reaches the next reply and a redraw stays cheap.
 const COLOUR_MS = 5000
+// A reply that needs more LaTeX runs than this is drawn as Unicode text, so a long derivation starts no flood of them.
+const MAX_FORMULAS = 60
+const REQUIREMENTS = 'https://github.com/atomashevic/claude-latex-math#requirements'
 
-const SECTION = {
-  id: 'latex-math:rendering',
-  scope: 'session',
-  text: [
-    '# Math rendering',
-    'This terminal typesets LaTeX math as images. Display math (`$$ ... $$` on its own lines, or an amsmath environment such as `\\begin{align} ... \\end{align}`) is drawn in place at full size. Inline math (`$...$`) in a paragraph or a list item is drawn inside the line, one text row tall, so keep it to expressions that fit a line and put tall formulas (stacked fractions, matrices, sums with limits above and below) in display math. In a table, a heading or a quote, inline math is written as Unicode text instead.',
-  ].join('\n'),
-} as const
+function section(inlineMath: Settings['inline']) {
+  const inlineText =
+    inlineMath === 'image'
+      ? 'Inline math (`$...$`) in a paragraph or a list item is drawn inside the line, one text row tall, so keep it to expressions that fit a line and put tall formulas (stacked fractions, matrices, sums with limits above and below) in display math. In a table, a heading or a quote, inline math is written as Unicode text instead.'
+      : 'Inline math (`$...$`) is written as Unicode text, so keep it to short expressions (symbols, subscripts, superscripts, simple fractions) and put larger formulas in display math.'
+  return {
+    id: 'latex-math:rendering',
+    scope: 'session',
+    text: [
+      '# Math rendering',
+      `This terminal typesets LaTeX math as images. Display math (\`$$ ... $$\` on its own lines, or an amsmath environment such as \`\\begin{align} ... \\end{align}\`) is drawn in place at full size. ${inlineText}`,
+    ].join('\n'),
+  } as const
+}
 
+let settings: Settings = readSettings({})
+let session: Promise<Drawing> | undefined
 let cache: Promise<string> | undefined
 let colour: { readAt: number; value: Promise<string> } | undefined
 const formulas = new Map<string, Promise<Formula>>()
@@ -65,25 +82,83 @@ async function cacheDir($: EngineInterface): Promise<string> {
   return `${home}/claude-latex-math`
 }
 
-async function render($: EngineInterface, tex: string, foreground: string, mode: Mode): Promise<Formula> {
+function listed(names: string): string {
+  const all = names.split(' ')
+  return all.length === 1 ? all.join('') : `${all.slice(0, -1).join(', ')} and ${all[all.length - 1]}`
+}
+
+// Deletes the least recently used pictures until the cache fits its limit.
+async function prune($: EngineInterface): Promise<void> {
   const dir = await (cache ??= cacheDir($))
-  const key = keyOf(foreground, tex)
-  const ran = await $.process.run(['bash', `${$.plugin.root}/bin/render.sh`, dir, key, foreground, mode], {
-    stdin: tex,
+  const doomed = overflow(await $.fs.list(dir), settings.cacheBytes)
+  for (let i = 0; i < doomed.length; i += 200) {
+    await $.process.run(['rm', '-f', '--', ...doomed.slice(i, i + 200).map(name => `${dir}/${name}`)])
+  }
+}
+
+async function start($: EngineInterface): Promise<Drawing> {
+  const env: Terminal = {
+    TERM: await $.env.get('TERM'),
+    TERM_PROGRAM: await $.env.get('TERM_PROGRAM'),
+    KITTY_WINDOW_ID: await $.env.get('KITTY_WINDOW_ID'),
+    TMUX: await $.env.get('TMUX'),
+    STY: await $.env.get('STY'),
+    SSH_CONNECTION: await $.env.get('SSH_CONNECTION'),
+    SSH_TTY: await $.env.get('SSH_TTY'),
+    CLAUDE_CODE_SESSION_KIND: await $.env.get('CLAUDE_CODE_SESSION_KIND'),
+    CLAUDE_CODE_FORCE_TERMINAL_IMAGES: await $.env.get('CLAUDE_CODE_FORCE_TERMINAL_IMAGES'),
+  }
+  const chosen = await decide(settings.images, env, async () => {
+    const ran = await $.process.run(['bash', `${$.plugin.root}/bin/render.sh`, '--check'])
+    return ran.exitCode === 0 ? '' : ran.stdout.trim() || 'a tool'
   })
+  if (chosen.kind === 'text' && chosen.reason === 'missing') {
+    $.ui.log(`latex-math: ${listed(chosen.missing)} not found, so math is shown as Unicode text. See ${REQUIREMENTS}`)
+  }
+  await prune($).catch(() => undefined)
+  return chosen
+}
+
+// Decided once a session: on its start, or on the first draw where a test or a reload skipped the start.
+// A start that fails (an abandoned dispatch, a check that could not run) draws text once and is tried again.
+function drawing($: EngineInterface): Promise<Drawing> {
+  session ??= start($).catch((): Drawing => {
+    session = undefined
+    return { kind: 'text', reason: 'terminal' }
+  })
+  return session
+}
+
+async function render($: EngineInterface, tex: string, foreground: string, mode: Mode, bytes: boolean): Promise<Formula> {
+  const dir = await (cache ??= cacheDir($))
+  const scale = mode === 'display' ? settings.scale : 1
+  const key = keyOf(scale === 1 ? foreground : `${foreground}@${scale}`, tex)
+  const ran = await $.process.run(
+    ['bash', `${$.plugin.root}/bin/render.sh`, dir, key, foreground, mode, String(scale)],
+    { stdin: tex },
+  )
   const [columns, rows] = ran.stdout.trim().split(' ').map(Number)
   if (ran.exitCode !== 0 || !columns || !rows) {
     return { status: 'failed', reason: ran.stderr.trim().slice(0, 200) || 'the renderer printed no size' }
   }
-  return { status: 'ready', path: `${dir}/${key}.png`, cells: { columns, rows } }
+  const path = `${dir}/${key}.png`
+  const png = bytes ? (await $.fs.read(path, { as: 'bytes' })).base64 : undefined
+  return { status: 'ready', path, cells: { columns, rows }, png }
 }
 
-function formula($: EngineInterface, tex: string, foreground: string, mode: Mode): Promise<Formula> {
+async function formula($: EngineInterface, tex: string, foreground: string, mode: Mode, bytes: boolean): Promise<Formula> {
   const id = `${foreground}\n${tex}`
+  const known = formulas.get(id)
+  if (known !== undefined) {
+    const result = await known
+    // Another session's cache trim, or the user, can delete a picture this session still draws.
+    if (result.status === 'failed' || result.png !== undefined || (await $.fs.exists(result.path))) return result
+    if (formulas.get(id) === known) formulas.delete(id)
+  }
   let pending = formulas.get(id)
   if (pending === undefined) {
     // A rejection is an abandoned dispatch or a missing binary, so the next draw tries again.
-    pending = render($, tex, foreground, mode).catch(error => {
+    pending = render($, tex, foreground, mode, bytes).catch(error => {
       formulas.delete(id)
       return { status: 'failed', reason: String(error).slice(0, 200) }
     })
@@ -92,18 +167,39 @@ function formula($: EngineInterface, tex: string, foreground: string, mode: Mode
   return pending
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  settings = readSettings(options)
+
+  on('session.start', async ($, e, next) => {
+    const started = await next(e)
+    // Only a session that draws in the terminal needs the decision; -p and the SDK never draw.
+    if (e.surface === 'terminal') await drawing($)
+    return started
+  })
+
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    if (e.surfaces[0] !== 'terminal') return composed
-    return { sections: [...composed.sections, SECTION] }
+    if (e.surfaces[0] !== 'terminal' || !settings.promptSection) return composed
+    if ((await drawing($)).kind !== 'images') return composed
+    return { sections: [...composed.sections, section(settings.inline)] }
   })
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
-    const pieces = segments(e.props.text).flatMap((part): Piece[] =>
-      part.kind === 'text' ? blocks(part.text) : [{ kind: 'display', tex: part.tex, source: part.source }],
-    )
+    const parts = segments(e.props.text)
+    const inlines = parts.flatMap(part => (part.kind === 'text' ? inlineMath(part.text) : []))
+    const displays = parts.flatMap(part => (part.kind === 'math' ? [part.tex] : []))
+    if (inlines.length + displays.length === 0) return next(e)
+    const runs = new Set([...displays, ...(settings.inline === 'image' ? inlines : [])]).size
+    const how = await drawing($)
+    if (how.kind === 'text' || runs > MAX_FORMULAS) {
+      return next({ ...e, props: { ...e.props, text: asText(e.props.text) } })
+    }
+
+    const pieces = parts.flatMap((part): Piece[] => {
+      if (part.kind === 'math') return [{ kind: 'display', tex: part.tex, source: part.source }]
+      return settings.inline === 'image' ? blocks(part.text) : [{ kind: 'markdown', text: inline(part.text) }]
+    })
     if (pieces.every(piece => piece.kind === 'markdown')) {
       const text = inline(e.props.text)
       return next(text === e.props.text ? e : { ...e, props: { ...e.props, text } })
@@ -120,13 +216,15 @@ export const register: Register = on => {
       if (piece.kind === 'markdown') return []
       return piece.items.flatMap(item => item.tokens.flatMap((token): [string, Mode][] => (token.kind === 'math' ? [[token.tex, 'inline']] : [])))
     })
-    await Promise.all(wanted.map(async ([tex, mode]) => made.set(tex, await formula($, tex, foreground, mode))))
+    const bytes = how.source === 'bytes'
+    await Promise.all(wanted.map(async ([tex, mode]) => made.set(tex, await formula($, tex, foreground, mode, bytes))))
 
     const picture = (tex: string, source: string) => {
       const result = made.get(tex)
       if (result?.status !== 'ready') return undefined
       const { columns, rows } = fit(result.cells, room)
-      return <Image source={{ file: result.path, format: 'png' }} columns={columns} rows={rows} alt={source} />
+      const image = result.png === undefined ? { file: result.path, format: 'png' as const } : { png: result.png }
+      return <Image source={image} columns={columns} rows={rows} alt={source} />
     }
     const token = (one: Token) => (
       <Box marginRight={one.space ? 1 : 0} flexShrink={0}>

@@ -1,4 +1,6 @@
-// Inline math as Unicode text: `$\beta_0 \leq x^2$` becomes `β₀ ≤ x²`.
+// Math as Unicode text: `$\beta_0 \leq x^2$` becomes `β₀ ≤ x²`.
+
+import { segments } from './math'
 
 const SYMBOLS: Record<string, string> = {
   alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ϵ', varepsilon: 'ε', zeta: 'ζ', eta: 'η',
@@ -205,18 +207,45 @@ export function unicode(tex: string): string | undefined {
 const INLINE =
   /(?:^|\n)[ \t]*(```|~~~)[\s\S]*?(?:\n[ \t]*\1|$)|`[^`\n]*`|\\\((.+?)\\\)|(?<![\\$\w])\$(?!\s)([^$\n]+?)(?<![\s\\])\$(?![\d$])/g
 
-/** Whether a piece of a reply's markdown holds inline math outside its code. */
-export function hasInline(markdown: string): boolean {
-  for (const match of markdown.matchAll(INLINE)) if ((match[2] ?? match[3]) !== undefined) return true
-  return false
+/** The TeX of each inline formula in a piece of a reply's markdown, outside its code. */
+export function inlineMath(markdown: string): string[] {
+  const found: string[] = []
+  for (const match of markdown.matchAll(INLINE)) {
+    const tex = match[2] ?? match[3]
+    if (tex !== undefined) found.push(tex)
+  }
+  return found
 }
+
+// The result is markdown again, so the characters markdown reads as markup are escaped.
+const escape = (text: string) => text.replace(/[\\*_`~[\]<>|]/g, '\\$&')
+
+// At the start of a line these make a list item or a heading: `- x`, `+ x`, `# x`, `1. x`.
+const escapeLineStart = (text: string) => text.replace(/^([-+#])/, '\\$1').replace(/^(\d+)([.)])/, '$1\\$2')
 
 /** A piece of a reply's markdown with its inline math, `$…$` and `\(…\)`, written as Unicode. */
 export function inline(markdown: string): string {
-  return markdown.replace(INLINE, (whole: string, _fence?: string, paren?: string, dollar?: string) => {
+  return markdown.replace(INLINE, (whole: string, ...groups: (string | number | undefined)[]) => {
+    const [, paren, dollar, offset] = groups as [string | undefined, string | undefined, string | undefined, number]
     const tex = paren ?? dollar
     if (tex === undefined) return whole
-    // The result is markdown again, so the characters markdown reads as markup are escaped.
-    return unicode(tex)?.replace(/[\\*_`~[\]<>|]/g, '\\$&') ?? whole
+    const text = unicode(tex)
+    if (text === undefined) return whole
+    return /(^|\n)[ \t]*$/.test(markdown.slice(0, offset)) ? escapeLineStart(escape(text)) : escape(text)
   })
+}
+
+/**
+ * A reply's markdown with all of its math as text: inline and display math in Unicode, and display
+ * math that Unicode cannot hold (an environment, an unknown command) as a LaTeX code block.
+ */
+export function asText(markdown: string): string {
+  return segments(markdown)
+    .map(part => {
+      if (part.kind === 'text') return inline(part.text)
+      const body = part.tex.match(/^\\\[ ([\s\S]*) \\\]$/)?.[1]
+      const text = body === undefined ? undefined : unicode(body)
+      return text === undefined ? `\`\`\`latex\n${body ?? part.tex}\n\`\`\`` : escapeLineStart(escape(text))
+    })
+    .join('\n\n')
 }
