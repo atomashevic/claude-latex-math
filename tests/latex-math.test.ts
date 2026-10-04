@@ -4,7 +4,8 @@ import type { TestBody } from 'claude-code/testing'
 
 import { overflow } from '../hooks/cache'
 import { blocks } from '../hooks/flow'
-import { fit, hexColour, keyOf, segments } from '../hooks/math'
+import { refusal } from '../hooks/guard'
+import { fit, hexColour, segments, stemOf } from '../hooks/math'
 import { readSettings } from '../hooks/settings'
 import { decide, drawsImages } from '../hooks/terminal'
 import { asText, inline, unicode } from '../hooks/unicode'
@@ -41,11 +42,11 @@ test('math delimiters inside code, inline math and unclosed math stay text', () 
   expect(segments('```tex\n$$x$$')).toEqual([{ kind: 'text', text: '```tex\n$$x$$' }])
 })
 
-test('the cache key changes with the formula and with the text colour', () => {
-  expect(keyOf('d8d8d8', '\\[ x \\]')).toBe(keyOf('d8d8d8', '\\[ x \\]'))
-  expect(keyOf('d8d8d8', '\\[ x \\]')).toMatch(/^[0-9a-f]{14}$/)
-  expect(keyOf('d8d8d8', '\\[ x \\]')).not.toBe(keyOf('d8d8d8', '\\[ y \\]'))
-  expect(keyOf('d8d8d8', '\\[ x \\]')).not.toBe(keyOf('1f1f1f', '\\[ x \\]'))
+test('the file stem in the cache changes with the formula and with the text colour', () => {
+  expect(stemOf('d8d8d8', '\\[ x \\]')).toBe(stemOf('d8d8d8', '\\[ x \\]'))
+  expect(stemOf('d8d8d8', '\\[ x \\]')).toMatch(/^[0-9a-f]{14}$/)
+  expect(stemOf('d8d8d8', '\\[ x \\]')).not.toBe(stemOf('d8d8d8', '\\[ y \\]'))
+  expect(stemOf('d8d8d8', '\\[ x \\]')).not.toBe(stemOf('1f1f1f', '\\[ x \\]'))
 })
 
 test('a picture wider than its room shrinks in proportion', () => {
@@ -237,6 +238,42 @@ test('text that starts a line with a list or heading marker is escaped', () => {
   expect(inline('so $-x$ here')).toBe('so -x here')
 })
 
+test('formulas made of math commands pass the guard', () => {
+  const formulas = [
+    '\\[ \\hat{\\beta} = \\arg\\min_{\\beta} \\lVert y - X\\beta \\rVert_2^2 = (X^\\top X)^{-1} X^\\top y \\]',
+    '\\[ \\mathrm{softmax}\\!\\left( \\frac{Q K^\\top}{\\sqrt{d_k}} \\right) V \\]',
+    '\\begin{align*} \\nabla \\cdot \\mathbf{E} &= \\frac{\\rho}{\\varepsilon_0} \\\\ \\nabla \\times \\mathbf{B} &= \\mu_0 \\mathbf{J} \\end{align*}',
+    '\\[ f(n) = \\begin{cases} n/2 & \\text{if } n \\text{ is even} \\\\ 3n+1 & \\text{otherwise} \\end{cases} \\]',
+    '\\[ A = \\begin{pmatrix} a & b \\\\c & d \\end{pmatrix}, \\quad \\det A = ad - bc \\]',
+    '\\[ \\mathbb{E}[X] = \\int_{\\mathbb{R}} x \\, f_X(x) \\, \\mathrm{d}x, \\qquad \\operatorname*{arg\\,max}_{\\theta} \\log p(x \\mid \\theta) \\]',
+    '\\[ \\sum_{\\substack{0 \\le i \\le m \\\\ 0 < j < n}} P(i, j) \\xrightarrow{\;f\;} \\boxed{E = mc^2} \\tag{1} \\]',
+    '\\(a \\% b, \\quad \\{x \\mid x > 0\\}, \\quad \\$5\\)',
+  ]
+  for (const tex of formulas) expect(refusal(tex)).toBeUndefined()
+})
+
+test('a command that is not on the list is refused, wherever it stands', () => {
+  expect(refusal('\\[ \\input{notes} \\]')).toBe('\\input is not on the list of math commands')
+  expect(refusal('\\[ \\text{\\input{notes}} \\]')).toBe('\\input is not on the list of math commands')
+  expect(refusal('\\[ \\def\\x{1} \\x \\]')).toBe('\\def is not on the list of math commands')
+  expect(refusal('\\[ \\catcode`\\@=11 \\]')).toBe('\\catcode is not on the list of math commands')
+  expect(refusal('\\[ \\mycommand{x} \\]')).toBe('\\mycommand is not on the list of math commands')
+  // `\\frac` is a line break and the letters frac, and `\\input` is a line break and the letters input.
+  expect(refusal('\\[ a \\\\frac b \\\\input \\]')).toBeUndefined()
+})
+
+test('an environment that is not on the list is refused', () => {
+  expect(refusal('\\begin{verbatim} x \\end{verbatim}')).toBe('the environment verbatim is not on the list')
+  expect(refusal('\\[ \\begin{input}{notes} \\]')).toBe('the environment input is not on the list')
+  expect(refusal('\\[ \\begin\\relax x \\]')).toBe('\\begin has no plain environment name')
+  expect(refusal('\\[ \\begin {aligned} a &= b \\end {aligned} \\]')).toBeUndefined()
+})
+
+test('the ^^ notation is refused', () => {
+  expect(refusal('\\[ x^^2 \\]')).toBe('the ^^ notation is not allowed')
+  expect(refusal('\\[ x^{2^2} \\]')).toBeUndefined()
+})
+
 const MESSAGE = {
   plugin: 'latex-math',
   surface: 'terminal',
@@ -339,17 +376,17 @@ test('a reply draws display math as images, inline math as one-row images, and t
   const images = await ui.findAll({ type: 'Image' })
   expect(images.map(image => image.props)).toMatchObject([
     {
-      source: { file: `${CACHE}/${keyOf('cdf2e3', '\\[ e^{i\\pi} + 1 = 0 \\]')}.png`, format: 'png' },
+      source: { file: `${CACHE}/${stemOf('cdf2e3', '\\[ e^{i\\pi} + 1 = 0 \\]')}.png`, format: 'png' },
       columns: 9,
       rows: 2,
       alt: '$$e^{i\\pi} + 1 = 0$$',
     },
-    { source: { file: `${CACHE}/${keyOf('cdf2e3', '\\(\\beta_0\\)')}.png` }, columns: 3, rows: 1, alt: '$\\beta_0$' },
+    { source: { file: `${CACHE}/${stemOf('cdf2e3', '\\(\\beta_0\\)')}.png` }, columns: 3, rows: 1, alt: '$\\beta_0$' },
     // 60 columns less the indent and a margin leave 56, so 98 x 2 becomes 56 x 1.
     { columns: 56, rows: 1 },
   ])
   const display = renders().find(run => run.stdin === '\\[ e^{i\\pi} + 1 = 0 \\]')
-  expect(display?.argv.slice(2)).toEqual([CACHE, keyOf('cdf2e3', '\\[ e^{i\\pi} + 1 = 0 \\]'), 'cdf2e3', 'display', '1'])
+  expect(display?.argv.slice(2)).toEqual([CACHE, stemOf('cdf2e3', '\\[ e^{i\\pi} + 1 = 0 \\]'), 'cdf2e3', 'display', '1'])
   expect(renders().find(run => run.stdin === '\\(\\beta_0\\)')?.argv[5]).toBe('inline')
   // The paragraph around the inline formula is drawn word by word.
   expect(await ui.find({ type: 'Text', text: 'then' })).toBeDefined()
@@ -436,7 +473,7 @@ test('when the renderer lacks its tools, one notice says so and math is Unicode 
     expect(await ui.find({ type: 'Text', text: 'engine: x²' })).toBeDefined()
   }
   expect(logs).toEqual([
-    'latex-math: latex and dvipng not found, so math is shown as Unicode text. See https://github.com/atomashevic/claude-latex-math#requirements',
+    "latex-math: latex and dvipng not found, so math is shown as Unicode text. The plugin's README lists what to install, under Requirements.",
   ])
   expect(renders()).toEqual([])
 })
@@ -501,12 +538,12 @@ test('promptSection=false leaves the system prompt alone', { options: { promptSe
   expect(await sectionIds($)).toEqual(['intro'])
 })
 
-test('scale=1.5 renders display math larger, under a key of its own', { options: { scale: 1.5 } }, async ($, on) => {
+test('scale=1.5 renders display math larger, in a file of its own', { options: { scale: 1.5 } }, async ($, on) => {
   const { renders } = machine(on)
   engineDraws(on)
   await $.ui.mount({ ...MESSAGE, props: { text: 'For $x$:\n\n$$y$$', isFirstOfReply: true } })
   expect(renders().find(run => run.argv[5] === 'display')?.argv.slice(3)).toEqual([
-    keyOf('cdf2e3@1.5', '\\[ y \\]'),
+    stemOf('cdf2e3@1.5', '\\[ y \\]'),
     'cdf2e3',
     'display',
     '1.5',
@@ -521,7 +558,7 @@ test('across ssh, the pictures travel as bytes', async ($, on) => {
   engineDraws(on)
   const ui = await $.ui.mount({ ...MESSAGE, props: { text: '$$y$$', isFirstOfReply: true } })
   expect((await ui.find({ type: 'Image' }))?.props.source).toEqual({ png: PIXEL })
-  expect(byteReads).toEqual([`${CACHE}/${keyOf('ffffff', '\\[ y \\]')}.png`])
+  expect(byteReads).toEqual([`${CACHE}/${stemOf('ffffff', '\\[ y \\]')}.png`])
 })
 
 test('a reply that needs more than 60 LaTeX runs is written as Unicode text', async ($, on) => {
@@ -554,7 +591,7 @@ test('a picture that is gone from the cache is rendered again', async ($, on) =>
   await $.ui.mount({ ...MESSAGE, props: { text: '$$y$$', isFirstOfReply: true } })
   await $.ui.mount({ ...MESSAGE, requestId: 'message-2', props: { text: '$$y$$', isFirstOfReply: true } })
   expect(renders().length).toBe(1)
-  gone.add(`${CACHE}/${keyOf('cdf2e3', '\\[ y \\]')}.png`)
+  gone.add(`${CACHE}/${stemOf('cdf2e3', '\\[ y \\]')}.png`)
   const ui = await $.ui.mount({ ...MESSAGE, requestId: 'message-3', props: { text: '$$y$$', isFirstOfReply: true } })
   expect(await ui.find({ type: 'Image' })).toBeDefined()
   expect(renders().length).toBe(2)
@@ -588,4 +625,16 @@ test('a session that never draws, such as claude -p, does no start-up work', asy
   on('session.start', () => ({ cwd: '/work' }))
   await $.session.start({ surface: null, isInteractive: false, cwd: '/work' })
   expect(runs).toEqual([])
+})
+
+test('a formula with a command off the list shows its source and runs no renderer', async ($, on) => {
+  const { renders } = machine(on)
+  engineDraws(on)
+  const text = 'See:\n\n$$\\input{notes}$$\n\nand $\\input{more}$ too, then $$x^2$$'
+  const ui = await $.ui.mount({ ...MESSAGE, props: { text, isFirstOfReply: true } })
+  expect(await ui.find({ type: 'Text', text: '$$\\input{notes}$$' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'not rendered: \\input is not on the list of math commands' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '$\\input{more}$' })).toBeDefined()
+  expect((await ui.findAll({ type: 'Image' })).map(image => image.props.alt)).toEqual(['$$x^2$$'])
+  expect(renders().map(run => run.stdin)).toEqual(['\\[ x^2 \\]'])
 })

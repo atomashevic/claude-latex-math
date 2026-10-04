@@ -72,13 +72,13 @@ class Picture:
 
 def typeset(tex: str, mode: str) -> Picture:
     body = f'\\({tex}\\)' if mode == 'inline' else f'\\[ {tex} \\]'
-    key = hashlib.sha1(f'{mode}\n{body}'.encode()).hexdigest()[:16]
-    ran = subprocess.run(['bash', str(HERE.parent / 'bin' / 'render.sh'), str(BUILD / 'eq'), key, FOREGROUND_HEX, mode],
+    stem = hashlib.sha1(f'{mode}\n{body}'.encode()).hexdigest()[:16]
+    ran = subprocess.run(['bash', str(HERE.parent / 'bin' / 'render.sh'), str(BUILD / 'eq'), stem, FOREGROUND_HEX, mode],
                          input=body, capture_output=True, text=True, env={**os.environ, 'LATEX_MATH_RESOLUTION': RESOLUTION})
     if ran.returncode != 0:
         sys.exit(f'latex refused {tex!r}: {ran.stderr.strip()}')
     cols, rows = map(int, ran.stdout.split())
-    return Picture(BUILD / 'eq' / f'{key}.png', cols, rows)
+    return Picture(BUILD / 'eq' / f'{stem}.png', cols, rows)
 
 
 # Layout: what the plugin's ui.render hook draws, on a grid of cells.
