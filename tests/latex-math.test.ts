@@ -275,7 +275,18 @@ function machine(on: Parameters<TestBody>[1], setup: Machine = {}) {
   let checks = 0
   const env: Record<string, string> = { HOME: '/home/a', TERM_PROGRAM: 'ghostty', ...setup.env }
   on('env.get', ($, e) => ({ value: env[e.name] }))
-  on('settings.read', () => ({ value: { theme: setup.theme ?? 'dark' } }))
+  on('config.list', () => ({
+    value: [
+      {
+        key: 'theme',
+        label: 'Theme',
+        kind: 'choice',
+        value: setup.theme ?? 'dark',
+        provider: { plugin: 'engine', tier: 'core' },
+        isLocked: false,
+      },
+    ],
+  }))
   on('fs.list', () => ({ value: setup.cache ?? [] }))
   on('fs.exists', ($, e) => ({ value: !setup.gone?.has(e.path) }))
   on('fs.read', ($, e) => {

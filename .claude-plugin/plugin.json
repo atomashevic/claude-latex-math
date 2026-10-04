@@ -23,45 +23,31 @@
     "images": {
       "type": "string",
       "title": "Typeset math as images",
-      "description": "auto draws pictures in kitty and Ghostty and writes Unicode text in other terminals. on draws pictures in a terminal that the plugin does not recognise. off always writes Unicode text. Inside tmux or screen, Claude Code draws no pictures.",
-      "required": false,
-      "default": "auto",
-      "options": [
-        "auto",
-        "on",
-        "off"
-      ]
+      "description": "auto, on or off. auto draws pictures in kitty and Ghostty and writes Unicode text in other terminals. on draws pictures in a terminal that the plugin does not recognise. off always writes Unicode text. Inside tmux or screen, Claude Code draws no pictures.",
+      "default": "auto"
     },
     "inline": {
       "type": "string",
       "title": "Inline math",
-      "description": "image draws inline math ($...$) as one-row pictures inside the line. unicode writes it as Unicode text.",
-      "required": false,
-      "default": "image",
-      "options": [
-        "image",
-        "unicode"
-      ]
+      "description": "image or unicode. image draws inline math ($...$) as one-row pictures inside the line. unicode writes it as Unicode text.",
+      "default": "image"
     },
     "promptSection": {
       "type": "boolean",
       "title": "Tell Claude that math is typeset",
       "description": "Adds one short section to the system prompt, so Claude writes formulas in LaTeX. It is added only when pictures are on.",
-      "required": false,
       "default": true
     },
     "scale": {
       "type": "number",
       "title": "Size of display math",
       "description": "A multiple of the default size, from 0.5 to 2.",
-      "required": false,
       "default": 1
     },
     "cacheSizeMB": {
       "type": "number",
       "title": "Picture cache limit in MB",
       "description": "When a session starts, the least recently used pictures are deleted until the cache is under this size.",
-      "required": false,
       "default": 100
     }
   }
