@@ -38,3 +38,5 @@ jobs:
         run: shellcheck bin/render.sh tests/render.test.sh demo/encode.sh
       - name: Render real formulas
         run: tests/render.test.sh
+      - name: Probe the list of math commands
+        run: python3 tools/commands.py probe
