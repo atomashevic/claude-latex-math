@@ -4,8 +4,6 @@ A Claude Code mod that typesets the LaTeX math in Claude's replies. Display math
 
 ![Claude Code in Ghostty: a prompt asks about attention, and the formulas in the reply appear typeset, inline and on their own lines](docs/demo.gif)
 
-The animation is a scripted render. `demo/make_demo.py` draws the Ghostty window and typesets each formula with the plugin's own renderer.
-
 ![A reply about attention in Ghostty, with two display formulas and inline math in the text](docs/screenshot.png)
 
 The screenshot shows a reply in Ghostty. The two display formulas and the inline math in the text are images.
