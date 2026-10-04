@@ -50,6 +50,12 @@ elif [[ $error != *'!'* ]]; then
   fail "an unclosed brace fails without the TeX error: $error"
 fi
 
+if error=$(render '\[ x \hspace{3000pt} y \]' wide 2>&1); then
+  fail "a formula wider than 255 cells renders"
+elif [[ $error != *'too large'* ]]; then
+  fail "a formula that is too wide fails with another message: $error"
+fi
+
 if printf '%s' '\(x\)' | bin/render.sh "$cache" bad 'red;rm' inline 2>/dev/null; then
   fail "a colour that is not six hex digits is accepted"
 fi

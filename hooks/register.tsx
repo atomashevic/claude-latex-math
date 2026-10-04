@@ -2,8 +2,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { overflow } from './cache'
 import { blocks } from './flow'
+import { refusal } from './guard'
 import type { Block, Item, Token } from './flow'
-import { fit, hexColour, keyOf, segments } from './math'
+import { fit, hexColour, segments, stemOf } from './math'
 import type { Cells } from './math'
 import { readSettings } from './settings'
 import type { Settings } from './settings'
@@ -23,7 +24,6 @@ const INDENT = 2
 const COLOUR_MS = 5000
 // A reply that needs more LaTeX runs than this is drawn as Unicode text, so a long derivation starts no flood of them.
 const MAX_FORMULAS = 60
-const REQUIREMENTS = 'https://github.com/atomashevic/claude-latex-math#requirements'
 
 function section(inlineMath: Settings['inline']) {
   const inlineText =
@@ -35,7 +35,7 @@ function section(inlineMath: Settings['inline']) {
     scope: 'session',
     text: [
       '# Math rendering',
-      `This terminal typesets LaTeX math as images. Display math (\`$$ ... $$\` on its own lines, or an amsmath environment such as \`\\begin{align} ... \\end{align}\`) is drawn in place at full size. ${inlineText}`,
+      `This terminal typesets LaTeX math as images. Display math (\`$$ ... $$\` on its own lines, or an amsmath environment such as \`\\begin{align} ... \\end{align}\`) is drawn in place at full size. ${inlineText} Use only the commands of LaTeX and amsmath, and define no macros: a formula with any other command is shown as source.`,
     ].join('\n'),
   } as const
 }
@@ -114,7 +114,9 @@ async function start($: EngineInterface): Promise<Drawing> {
     return ran.exitCode === 0 ? '' : ran.stdout.trim() || 'a tool'
   })
   if (chosen.kind === 'text' && chosen.reason === 'missing') {
-    $.ui.log(`latex-math: ${listed(chosen.missing)} not found, so math is shown as Unicode text. See ${REQUIREMENTS}`)
+    $.ui.log(
+      `latex-math: ${listed(chosen.missing)} not found, so math is shown as Unicode text. The plugin's README lists what to install, under Requirements.`,
+    )
   }
   await prune($).catch(() => undefined)
   return chosen
@@ -131,18 +133,20 @@ function drawing($: EngineInterface): Promise<Drawing> {
 }
 
 async function render($: EngineInterface, tex: string, foreground: string, mode: Mode, bytes: boolean): Promise<Formula> {
+  const refused = refusal(tex)
+  if (refused !== undefined) return { status: 'failed', reason: refused }
   const dir = await (cache ??= cacheDir($))
   const scale = mode === 'display' ? settings.scale : 1
-  const key = keyOf(scale === 1 ? foreground : `${foreground}@${scale}`, tex)
+  const stem = stemOf(scale === 1 ? foreground : `${foreground}@${scale}`, tex)
   const ran = await $.process.run(
-    ['bash', `${$.plugin.root}/bin/render.sh`, dir, key, foreground, mode, String(scale)],
+    ['bash', `${$.plugin.root}/bin/render.sh`, dir, stem, foreground, mode, String(scale)],
     { stdin: tex },
   )
   const [columns, rows] = ran.stdout.trim().split(' ').map(Number)
   if (ran.exitCode !== 0 || !columns || !rows) {
     return { status: 'failed', reason: ran.stderr.trim().slice(0, 200) || 'the renderer printed no size' }
   }
-  const path = `${dir}/${key}.png`
+  const path = `${dir}/${stem}.png`
   const png = bytes ? (await $.fs.read(path, { as: 'bytes' })).base64 : undefined
   return { status: 'ready', path, cells: { columns, rows }, png }
 }
@@ -258,7 +262,7 @@ export const register: Register = (on, options) => {
         picture(piece.tex, piece.source) ?? (
           <Box flexDirection="column">
             <Text>{piece.source}</Text>
-            <Text dimColor>latex: {result?.status === 'failed' ? result.reason : 'not rendered'}</Text>
+            <Text dimColor>not rendered: {result?.status === 'failed' ? result.reason : 'no picture'}</Text>
           </Box>
         )
       )

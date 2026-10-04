@@ -7,13 +7,13 @@ import type { FsEntry } from 'claude-code'
 export function overflow(entries: readonly FsEntry[], maxBytes: number): string[] {
   const pictures = new Map<string, { bytes: number; usedAt: number; names: string[] }>()
   for (const entry of entries) {
-    const key = entry.kind === 'file' ? entry.name.match(/^([0-9a-f]+)\.(?:png|cells)$/)?.[1] : undefined
-    if (key === undefined) continue
-    const picture = pictures.get(key) ?? { bytes: 0, usedAt: 0, names: [] }
+    const stem = entry.kind === 'file' ? entry.name.match(/^([0-9a-f]+)\.(?:png|cells)$/)?.[1] : undefined
+    if (stem === undefined) continue
+    const picture = pictures.get(stem) ?? { bytes: 0, usedAt: 0, names: [] }
     picture.bytes += entry.size
     picture.usedAt = Math.max(picture.usedAt, entry.mtimeMs)
     picture.names.push(entry.name)
-    pictures.set(key, picture)
+    pictures.set(stem, picture)
   }
   let kept = 0
   const doomed: string[] = []

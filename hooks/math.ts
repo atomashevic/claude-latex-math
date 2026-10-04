@@ -47,8 +47,8 @@ export function segments(markdown: string): Segment[] {
   return list
 }
 
-/** The cache key of one picture: a 53-bit hash (cyrb53) of everything that changes its pixels. */
-export function keyOf(foreground: string, tex: string): string {
+/** The file stem of one picture in the cache: a 53-bit hash (cyrb53) of everything that changes its pixels. */
+export function stemOf(foreground: string, tex: string): string {
   const input = `1\n${foreground}\n${tex}`
   let h1 = 0xdeadbeef
   let h2 = 0x41c6ce57
