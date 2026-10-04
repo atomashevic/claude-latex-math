@@ -1,0 +1,19 @@
+{
+  "name": "claude-latex-math",
+  "owner": {
+    "name": "Aleksandar Tomasevic",
+    "url": "https://github.com/atomashevic"
+  },
+  "plugins": [
+    {
+      "name": "latex-math",
+      "source": "./",
+      "description": "Typesets the LaTeX math in Claude's replies as images in the terminal, through the kitty graphics protocol",
+      "category": "productivity",
+      "tags": ["latex", "math", "equations", "tex", "mod", "terminal"]
+    }
+  ],
+  "metadata": {
+    "description": "LaTeX math as typeset images in Claude Code"
+  }
+}

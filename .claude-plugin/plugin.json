@@ -1,0 +1,13 @@
+{
+  "name": "latex-math",
+  "version": "0.1.0",
+  "description": "Typesets the LaTeX math in Claude's replies as images in the terminal, through the kitty graphics protocol",
+  "author": {
+    "name": "Aleksandar Tomasevic",
+    "url": "https://github.com/atomashevic"
+  },
+  "homepage": "https://github.com/atomashevic/claude-latex-math",
+  "repository": "https://github.com/atomashevic/claude-latex-math",
+  "license": "MIT",
+  "keywords": ["latex", "math", "equations", "tex", "kitty-graphics", "mod", "terminal", "claude-code"]
+}
