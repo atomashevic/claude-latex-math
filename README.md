@@ -2,9 +2,9 @@
 
 A Claude Code mod that typesets the LaTeX math in Claude's replies. Display math becomes an image in the reply. Inline math becomes a small image inside the line of text.
 
-![Four display formulas as the renderer draws them](docs/render-sample.png)
+![A reply about attention in Ghostty, with two display formulas and inline math in the text](docs/screenshot.png)
 
-The picture shows the output of the renderer for four display formulas, in the text colour of the theme.
+The screenshot shows a reply in Ghostty. The two display formulas and the inline math in the text are images.
 
 ## Install
 
