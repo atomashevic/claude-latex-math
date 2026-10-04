@@ -1,6 +1,25 @@
 # Changelog
 
-## 0.2.0 (not released)
+## 0.3.0 (2026-10-04)
+
+### Security
+
+- The mod renders a formula only when every command in it is on a list of math commands (`hooks/commands.ts`). Before, any formula went to LaTeX, and LaTeX can read every file that the user can read. A formula with another command now shows as its source, with the reason.
+- `tools/commands.py` builds the list and probes it: each listed command is called with a canary command name and a canary file in every argument position. CI runs the probe.
+- `dvipng` runs with Ghostscript off and stops after 20 seconds. A picture larger than 255 terminal cells in either direction is refused.
+
+### Fixed
+
+- The README and SECURITY.md said that the `openin_any` setting stops a formula from reading files. TeX Live 2026 made that setting a no-op. The documents now describe the command list.
+
+### Changed
+
+- The system prompt section asks Claude to use only the commands of LaTeX and amsmath.
+- The line under a formula that is not rendered starts with `not rendered:`.
+- The notice about missing tools points to the README and has no link.
+- The README says what each hook changes, which programs the mod runs, and what it reads and sends.
+
+## 0.2.0 (2026-10-04)
 
 ### Added
 
