@@ -2,15 +2,16 @@
 """Renders the latex-math demo video: a Claude Code session in Ghostty asks about attention,
 and the math in the reply is typeset in place, display and inline.
 
-The formulas come from the plugin's own renderer (render-hires.sh is bin/render.sh at 2.4 times
-the resolution). The terminal is drawn to the measurements of the author's Ghostty: JetBrains Mono,
-a 1:2.2 cell, the Omarchy colours, and pictures fitted into their cells with their aspect kept.
+The formulas come from the plugin's own renderer, bin/render.sh, at 2.4 times its resolution.
+The terminal is drawn to the measurements of the author's Ghostty: JetBrains Mono, a 1:2.2 cell,
+the Omarchy colours, and pictures fitted into their cells with their aspect kept.
 
 usage: make_demo.py [--stills t1,t2,...] [--fps N] [--size WxH]
 """
 import argparse
 import hashlib
 import math
+import os
 import random
 import re
 import subprocess
@@ -25,7 +26,8 @@ BUILD = HERE / 'build'
 
 # One terminal cell in scene pixels: 2.4 times the cell of the author's Ghostty (20 x 44 at 1x).
 CW, CH, BASELINE = 48, 106, 82
-PICTURE_CELL_H = 96  # render-hires.sh pads each picture to 48 x 96 per cell
+RESOLUTION = '2.4'
+PICTURE_CELL_H = 96  # at that resolution, render.sh pads each picture to 48 x 96 per cell
 COLS = 64
 FONT = ImageFont.truetype('/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf', 80)
 FALLBACK = ImageFont.truetype('/usr/share/fonts/TTF/IosevkaTermNerdFontMono-Regular.ttf', 88)
@@ -71,8 +73,8 @@ class Picture:
 def typeset(tex: str, mode: str) -> Picture:
     body = f'\\({tex}\\)' if mode == 'inline' else f'\\[ {tex} \\]'
     key = hashlib.sha1(f'{mode}\n{body}'.encode()).hexdigest()[:16]
-    ran = subprocess.run(['bash', str(HERE / 'render-hires.sh'), str(BUILD / 'eq'), key, FOREGROUND_HEX, mode],
-                         input=body, capture_output=True, text=True)
+    ran = subprocess.run(['bash', str(HERE.parent / 'bin' / 'render.sh'), str(BUILD / 'eq'), key, FOREGROUND_HEX, mode],
+                         input=body, capture_output=True, text=True, env={**os.environ, 'LATEX_MATH_RESOLUTION': RESOLUTION})
     if ran.returncode != 0:
         sys.exit(f'latex refused {tex!r}: {ran.stderr.strip()}')
     cols, rows = map(int, ran.stdout.split())

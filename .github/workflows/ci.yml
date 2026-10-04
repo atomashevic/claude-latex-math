@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    name: Plugin validation and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Install Claude Code
+        run: npm install --global @anthropic-ai/claude-code@2.1.289
+      - name: Validate the plugin
+        run: claude plugin validate .
+      - name: Run the plugin tests
+        run: claude plugin test .
+
+  renderer:
+    name: Renderer and shell scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install TeX Live, dvipng, ImageMagick and shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            texlive-latex-recommended dvipng preview-latex-style imagemagick shellcheck
+      - name: Check the shell scripts
+        run: shellcheck bin/render.sh tests/render.test.sh demo/encode.sh
+      - name: Render real formulas
+        run: tests/render.test.sh

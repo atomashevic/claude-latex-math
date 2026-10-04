@@ -1,6 +1,6 @@
 // A paragraph that holds inline math is drawn word by word, so a one-row picture can sit in the line.
 
-import { hasInline, inline } from './unicode'
+import { inline, inlineMath } from './unicode'
 
 export type Token =
   | { kind: 'word'; text: string; bold: boolean; italic: boolean; code: boolean; space: boolean }
@@ -95,7 +95,7 @@ function items(chunk: string): Item[] | undefined {
 export function blocks(markdown: string): Block[] {
   const list: Block[] = []
   for (const chunk of chunks(markdown)) {
-    const flow = hasInline(chunk) ? items(chunk) : undefined
+    const flow = inlineMath(chunk).length > 0 ? items(chunk) : undefined
     const last = list.at(-1)
     if (flow !== undefined) list.push({ kind: 'flow', items: flow })
     else if (last?.kind === 'markdown') last.text += `\n\n${inline(chunk)}`
