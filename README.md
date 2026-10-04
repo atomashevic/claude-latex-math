@@ -2,6 +2,10 @@
 
 A Claude Code mod that typesets the LaTeX math in Claude's replies. Display math becomes an image in the reply. Inline math becomes a small image inside the line of text.
 
+![Claude Code in Ghostty: a prompt asks about attention, and the formulas in the reply appear typeset, inline and on their own lines](docs/demo.gif)
+
+The animation is a scripted render. `demo/make_demo.py` draws the Ghostty window and typesets each formula with the plugin's own renderer.
+
 ![A reply about attention in Ghostty, with two display formulas and inline math in the text](docs/screenshot.png)
 
 The screenshot shows a reply in Ghostty. The two display formulas and the inline math in the text are images.
@@ -100,6 +104,8 @@ printf '\\[ e^{i\\pi} + 1 = 0 \\]' | bin/render.sh /tmp/math euler d8d8d8 displa
 ```
 
 The script prints the size in cells and writes `/tmp/math/euler.png`.
+
+To render the demo animation, run `demo/make_demo.py`, then `demo/encode.sh`. They need Python with Pillow and ffmpeg. The animation in this README is the 720 px GIF that `demo/encode.sh` writes, because the plugin directory accepts no file over 5 MiB.
 
 ## Credits
 
