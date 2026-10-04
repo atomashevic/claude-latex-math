@@ -49,7 +49,8 @@ const formulas = new Map<string, Promise<Formula>>()
 // The glyphs are drawn over a transparent background in the colour Claude Code gives a reply's
 // text: a custom theme's `text`, and under a built-in theme the terminal's own foreground.
 async function textColour($: EngineInterface): Promise<string> {
-  const { theme } = await $.settings.read()
+  // The theme's row in /config, which is all the mod needs; the whole settings object can hold secrets.
+  const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
   let base = String(theme ?? 'auto')
   if (base.startsWith('custom:')) {
     const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${await $.env.get('HOME')}/.claude`
