@@ -13,11 +13,13 @@
 - `bin/render.sh --check`, which lists the missing tools and LaTeX packages.
 - Support for ImageMagick 6, as Debian and Ubuntu ship it.
 - CI: `claude plugin validate`, `claude plugin test`, `shellcheck`, and a test of the renderer on real formulas on Ubuntu 24.04.
-- PRIVACY.md, SECURITY.md, and sections in the README on settings, troubleshooting, privacy and support.
+- PRIVACY.md, SECURITY.md, and sections in the README on settings, troubleshooting, privacy, support, and what the mod runs, reads and sends.
+- A plugin icon: a typeset sum and a terminal prompt.
 
 ### Changed
 
 - The system prompt section is added only when the mod draws images.
+- The mod reads only the `theme` row of `/config`, not the whole settings object.
 - The demo renders with `bin/render.sh` at a higher resolution, instead of a copy of the script.
 
 ## 0.1.0 (2026-10-04)

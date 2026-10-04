@@ -135,16 +135,43 @@ The command prints an empty line and exits with 0 when every tool and package is
 
 The mod runs only on your machine and sends no data anywhere. [PRIVACY.md](PRIVACY.md) lists what it reads, what it writes and how long the files stay.
 
+## What the mod runs, reads and sends
+
+The mod makes no network requests. Everything in this section stays on your computer.
+
+### Programs it runs
+
+The mod starts four commands with `$.process.run`. `<plugin>` is the plugin's folder, and `<key>` is a hash of the formula, the colour and the scale.
+
+| Command | When | Why |
+| --- | --- | --- |
+| `bash <plugin>/bin/render.sh <cache folder> <key> <colour> <display or inline> <scale>` | Once for each new formula | Typesets the formula. The script runs `latex`, `dvipng` and ImageMagick (`magick`, or `convert` and `identify`) in a temporary folder, and deletes the folder when it ends. |
+| `bash <plugin>/bin/render.sh --check` | Once when a terminal session starts | Lists missing tools and LaTeX packages. The script runs `command -v` and `kpsewhich`. |
+| `rm -f -- <cache files>` | Once when a terminal session starts, if the cache is over `cacheSizeMB` | Deletes the least recently used images. It deletes only files in the cache folder whose names the renderer made. |
+| `ghostty +show-config` | In Ghostty, at most once every 5 seconds while it draws replies | Reads the terminal's foreground colour. |
+
+`latex` runs with shell escape off (`-no-shell-escape`) and with `openin_any=p` and `openout_any=p`, which stop a formula from opening a file by an absolute path or in a parent directory.
+
+### What it sends, and where
+
+- The LaTeX of each formula goes to `bin/render.sh` on its standard input.
+- Each image goes to the terminal through Claude Code's `Image` element: as a file path, or as PNG bytes over SSH.
+- When a tool is missing, one notice line goes to the transcript with `$.ui.log`. Claude does not see it.
+- The system prompt section in [What the mod tells Claude](#what-the-mod-tells-claude) goes to Claude inside Claude Code's own requests to Anthropic. The mod adds the section and sends nothing itself.
+
+### What it reads
+
+- Claude's replies, as Claude Code draws them.
+- The `theme` row of `/config`, with `$.config.list`, and for a custom theme the theme file in `~/.claude/themes/`. It does not read the rest of your settings.
+- The output of `ghostty +show-config`.
+- The environment variables `HOME`, `XDG_CACHE_HOME` and `CLAUDE_CONFIG_DIR`, to find folders. `TERM`, `TERM_PROGRAM`, `KITTY_WINDOW_ID`, `TMUX`, `STY`, `CLAUDE_CODE_SESSION_KIND` and `CLAUDE_CODE_FORCE_TERMINAL_IMAGES`, to learn whether the terminal draws images. `SSH_CONNECTION` and `SSH_TTY`, to learn whether the terminal is on another computer. None of these is a credential, and the mod sends none of them anywhere.
+- The file list of the cache folder, and whether an image file still exists.
+
+It writes images to `~/.cache/claude-latex-math/`, or to `$XDG_CACHE_HOME/claude-latex-math/` when that variable is set. Run `claude plugin validate .` in the repository to see each event that the mod hooks and each call that it makes.
+
 ## Security
 
-The mod makes no network requests.
-
-- It runs `latex` on formulas from the model with shell escape off (`-no-shell-escape`) and with `openin_any=p` and `openout_any=p`, which stop a formula from opening a file by an absolute path or in a parent directory.
-- It reads the `theme` setting and, for a custom theme, the theme file in `~/.claude/themes/`.
-- In Ghostty, it runs `ghostty +show-config` to read the foreground colour.
-- It writes PNG files to `~/.cache/claude-latex-math/`, or to `$XDG_CACHE_HOME/claude-latex-math/` when that variable is set, and deletes old ones there with `rm`.
-
-Run `claude plugin validate .` in the repository to see each event that the mod hooks and each call that it makes. To report a vulnerability, see [SECURITY.md](SECURITY.md).
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Support
 
@@ -178,6 +205,8 @@ printf '\\[ e^{i\\pi} + 1 = 0 \\]' | bin/render.sh /tmp/math euler d8d8d8 displa
 The script prints the size in cells and writes `/tmp/math/euler.png`.
 
 To render the demo animation, run `demo/make_demo.py`, then `demo/encode.sh`. They need Python with Pillow and ffmpeg. The animation in this README is the 720 px GIF that `demo/encode.sh` writes, because the plugin directory accepts no file over 5 MiB.
+
+`demo/make_icon.py` draws the plugin icon from one formula typeset by LaTeX.
 
 [CHANGELOG.md](CHANGELOG.md) lists the changes in each version.
 

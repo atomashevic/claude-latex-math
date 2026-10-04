@@ -7,7 +7,7 @@ The plugin runs only on your computer. It sends no data over the network, it has
 ## What the plugin reads
 
 - The text of each assistant message that Claude Code draws in the terminal, to find the LaTeX math in it.
-- The `theme` setting of Claude Code and, for a custom theme, the theme file in `~/.claude/themes/`, to find the text colour.
+- The `theme` row of Claude Code's `/config`, and for a custom theme the theme file in `~/.claude/themes/`, to find the text colour. It does not read the rest of your settings.
 - In Ghostty, the output of `ghostty +show-config`, to find the terminal's foreground colour.
 - The environment variables `HOME`, `XDG_CACHE_HOME`, `CLAUDE_CONFIG_DIR`, `TERM`, `TERM_PROGRAM`, `KITTY_WINDOW_ID`, `TMUX`, `STY`, `SSH_CONNECTION`, `SSH_TTY`, `CLAUDE_CODE_SESSION_KIND` and `CLAUDE_CODE_FORCE_TERMINAL_IMAGES`, to find the cache folder and to learn whether the terminal draws images.
 - The options you set for the plugin.
