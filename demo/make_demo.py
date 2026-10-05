@@ -4,7 +4,8 @@ and the math in the reply is typeset in place, display and inline.
 
 The formulas come from the plugin's own renderer, bin/render.sh, at 2.4 times its resolution.
 The terminal is drawn to the measurements of the author's Ghostty: JetBrains Mono, a 1:2.2 cell,
-the Omarchy colours, and pictures fitted into their cells with their aspect kept.
+GitHub's dark colours, and pictures fitted into their cells with their aspect kept. The frame
+shows the terminal only, with no window around it.
 
 usage: make_demo.py [--stills t1,t2,...] [--fps N] [--size WxH]
 """
@@ -19,7 +20,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
 BUILD = HERE / 'build'
@@ -33,15 +34,15 @@ FONT = ImageFont.truetype('/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.tt
 FALLBACK = ImageFont.truetype('/usr/share/fonts/TTF/IosevkaTermNerdFontMono-Regular.ttf', 88)
 FALLBACK_CHARS = set('✢✻✽')
 
-BG = (5, 12, 11)
-TEXT = (205, 242, 227)
+# GitHub Dark: canvas #0d1117, text #e6edf3, muted text #8b949e, border #30363d, raised surface #21262d.
+BG = (13, 17, 23)
+TEXT = (230, 237, 243)
 WHITE = (255, 255, 255)
-DIM = (153, 153, 153)
-RULE = (136, 136, 136)
-USER_BAR = (55, 55, 55)
+DIM = (139, 148, 158)
+RULE = (48, 54, 61)
+USER_BAR = (33, 38, 45)
 CLAUDE = (215, 119, 87)
 CLAUDE_LIGHT = (245, 182, 160)
-ACCENT = (93, 255, 176)
 FOREGROUND_HEX = '%02x%02x%02x' % TEXT
 
 PROMPT = 'explain the attention mechanism'
@@ -72,7 +73,7 @@ class Picture:
 
 def typeset(tex: str, mode: str) -> Picture:
     body = f'\\({tex}\\)' if mode == 'inline' else f'\\[ {tex} \\]'
-    stem = hashlib.sha1(f'{mode}\n{body}'.encode()).hexdigest()[:16]
+    stem = hashlib.sha1(f'{FOREGROUND_HEX}\n{mode}\n{body}'.encode()).hexdigest()[:16]
     ran = subprocess.run(['bash', str(HERE.parent / 'bin' / 'render.sh'), str(BUILD / 'eq'), stem, FOREGROUND_HEX, mode],
                          input=body, capture_output=True, text=True, env={**os.environ, 'LATEX_MATH_RESOLUTION': RESOLUTION})
     if ran.returncode != 0:
@@ -220,8 +221,6 @@ def layout() -> Layout:
 # The scene: background, window, terminal grid.
 
 PAD_X, PAD_TOP, PAD_BOTTOM = 92, 80, 64
-MARGIN = 460
-RADIUS = 34
 
 
 @dataclass
@@ -240,44 +239,17 @@ class Scene:
 
 
 def make_scene(transcript_rows: int) -> Scene:
+    """The scene is the terminal and nothing around it: its padding, then the grid of cells."""
     done_row = transcript_rows + 1
     prompt_row = done_row + 3  # done line, blank, rule, prompt
     rows = prompt_row + 3      # rule, hint, and one spare row the hint leaves under itself
-    window_w = COLS * CW + 2 * PAD_X
-    window_h = rows * CH + PAD_TOP + PAD_BOTTOM
-    height = window_h + 2 * MARGIN
-    width = max(window_w + 2 * MARGIN, round(height * 16 / 9))
-    height = round(width * 9 / 16)
-    left = (width - window_w) // 2
-    top = (height - window_h) // 2
-    return Scene(rows, prompt_row, width, height, (left, top, left + window_w, top + window_h))
-
-
-def gradient(size, inner, outer) -> Image.Image:
-    radial = Image.radial_gradient('L').resize(size, Image.BICUBIC)
-    channels = [radial.point(lambda v, a=a, b=b: round(a + (b - a) * min(1, v / 200))) for a, b in zip(inner, outer)]
-    return Image.merge('RGB', channels).convert('RGBA')
+    width = COLS * CW + 2 * PAD_X
+    height = rows * CH + PAD_TOP + PAD_BOTTOM
+    return Scene(rows, prompt_row, width, height, (0, 0, width, height))
 
 
 def base_image(scene: Scene) -> Image.Image:
-    image = gradient((scene.width, scene.height), (16, 38, 32), (2, 6, 5))
-    left, top, right, bottom = scene.window
-
-    glow = Image.new('L', image.size, 0)
-    ImageDraw.Draw(glow).rounded_rectangle((left, top, right, bottom), RADIUS, fill=46)
-    glow = glow.filter(ImageFilter.GaussianBlur(160))
-    image.alpha_composite(Image.merge('RGBA', [Image.new('L', image.size, c) for c in ACCENT] + [glow]))
-
-    shadow = Image.new('L', image.size, 0)
-    ImageDraw.Draw(shadow).rounded_rectangle((left, top + 50, right, bottom + 50), RADIUS, fill=170)
-    shadow = shadow.filter(ImageFilter.GaussianBlur(70))
-    image.alpha_composite(Image.merge('RGBA', [Image.new('L', image.size, 0)] * 3 + [shadow]))
-
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((left, top, right, bottom), RADIUS, fill=BG + (255,),
-                           outline=tuple(round(a * 0.55 + b * 0.45) for a, b in zip(ACCENT, BG)) + (255,), width=5)
-
-    return image
+    return Image.new('RGBA', (scene.width, scene.height), BG + (255,))
 
 
 def prompt_box(typed: str, cursor: bool) -> Image.Image:
@@ -356,36 +328,29 @@ def build_timeline(scene: Scene, lay: Layout) -> Timeline:
         u = smootherstep(t / enter)
         return prompt_view(44 + (40 - 44) * u, 1)(t)
 
-    left, top, right, bottom = scene.window
-    full_vw = max(right - left + 320, (bottom - top + 320) * 16 / 9)
-    full = lambda t: ((left + right) / 2, (top + bottom) / 2, full_vw)
     follow = follow_view(scene, lay, enter, done + 1.0)
-    end_prompt = prompt_view(44, scene.prompt_row)
+    # After the reply, the view glides back to its top at the same zoom, past every formula.
+    top = lambda t: (scene.width / 2, scene.width * 9 / 32, scene.width)
 
     moves = [
         (0.0, enter, typing_view, typing_view),
         (enter, enter + 0.9, prompt_view(40, 1), follow),
-        (enter + 0.9, done + 0.7, follow, follow),
-        (done + 0.7, done + 1.7, follow, full),
-        (done + 1.7, done + 3.1, full, full),
-        (done + 3.1, done + 4.0, full, end_prompt),
-        (done + 4.0, done + 4.5, end_prompt, end_prompt),
+        (enter + 0.9, done + 1.0, follow, follow),
+        (done + 1.0, done + 3.6, follow, top),
+        (done + 3.6, done + 4.5, top, top),
     ]
-    crossfade = 0.5
+    crossfade = 0.6
     return Timeline(keys, enter, done, done + 4.5 + crossfade, crossfade, moves)
-
-
-FOLLOW_COLS = COLS + 6
 
 
 def follow_view(scene: Scene, lay: Layout, start: float, end: float):
     """One fixed zoom that glides down with the reply: the newest line sits about 62% down the view.
     A critically damped spring carries the view, so a formula that adds several rows at once eases in."""
-    vw = FOLLOW_COLS * CW
+    vw = scene.width  # the whole width of the terminal
     vh = vw * 9 / 16
-    cx = scene.x(COLS / 2)
-    highest = scene.window[1] - 0.35 * CH + vh / 2
-    lowest = scene.window[3] + 0.35 * CH - vh / 2
+    cx = scene.width / 2
+    highest = vh / 2
+    lowest = scene.height - vh / 2
 
     def target(t):
         return min(max(scene.y(status_row(lay, t) + 1) - 0.12 * vh, highest), lowest)
