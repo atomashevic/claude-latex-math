@@ -297,6 +297,8 @@ type Machine = {
   missing?: string
   /** How many of the first `render.sh --check` runs reject, as an abandoned dispatch does. */
   checkRejects?: number
+  /** How many of the first `ghostty +show-config` runs reject, as an abandoned dispatch does. */
+  colourRejects?: number
   /** Paths that no longer exist, as after a cache trim. */
   gone?: Set<string>
   cache?: FsEntry[]
@@ -310,6 +312,7 @@ function machine(on: Parameters<TestBody>[1], setup: Machine = {}) {
   const logs: string[] = []
   const byteReads: string[] = []
   let checks = 0
+  let colourReads = 0
   const env: Record<string, string> = { HOME: '/home/a', TERM_PROGRAM: 'ghostty', ...setup.env }
   on('env.get', ($, e) => ({ value: env[e.name] }))
   on('config.list', () => ({
@@ -337,7 +340,10 @@ function machine(on: Parameters<TestBody>[1], setup: Machine = {}) {
   })
   on('process.run', ($, e) => {
     runs.push({ argv: e.argv, stdin: e.init?.stdin })
-    if (e.argv[0] === 'ghostty') return { value: { ...DONE, stdout: 'font-size = 9\nforeground = #CDF2E3\n' } }
+    if (e.argv[0] === 'ghostty') {
+      if (++colourReads <= (setup.colourRejects ?? 0)) throw new Error('the dispatch was abandoned')
+      return { value: { ...DONE, stdout: 'font-size = 9\nforeground = #CDF2E3\n' } }
+    }
     if (e.argv[0] === 'rm') return { value: { ...DONE, stdout: '' } }
     if (e.argv[2] === '--check') {
       if (++checks <= (setup.checkRejects ?? 0)) throw new Error('the dispatch was abandoned')
@@ -416,6 +422,16 @@ test('the formula takes the text colour of a custom Claude Code theme', async ($
   expect(renders().map(run => run.argv[4])).toEqual(['aabbcc'])
   // The terminal's own colour is not asked for: the theme names one.
   expect(runs.some(run => run.argv[0] === 'ghostty')).toBe(false)
+})
+
+test('a colour read that fails is not kept: the next draw reads the colour again', async ($, on) => {
+  const { runs, renders } = machine(on, { colourRejects: 1 })
+  on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine row'] }))
+  await $.ui.mount({ ...MESSAGE, requestId: 'message-1', props: { text: '$$a$$', isFirstOfReply: true } })
+  await $.ui.mount({ ...MESSAGE, requestId: 'message-2', props: { text: '$$b$$', isFirstOfReply: true } })
+  expect(runs.filter(run => run.argv[0] === 'ghostty').length).toBe(2)
+  // With no colour known yet, the first draw takes the theme's guess. The second has the terminal's.
+  expect(renders().map(run => run.argv[4])).toEqual(['ffffff', 'cdf2e3'])
 })
 
 test('a reply that opens with inline math draws its own bullet, and a failed formula shows its source', async ($, on) => {
