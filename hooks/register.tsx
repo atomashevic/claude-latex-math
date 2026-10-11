@@ -17,6 +17,8 @@ type Mode = 'display' | 'inline'
 type Piece = Block | { kind: 'display'; tex: string; source: string }
 /** `png` holds the picture's bytes, base64, when the terminal cannot read this machine's files. */
 type Formula = { status: 'ready'; path: string; cells: Cells; png?: string } | { status: 'failed'; reason: string }
+/** A read of the text colour: `isAnswer` is false when the terminal could not be asked, and `value` is then a guess. */
+type ColourRead = { value: string; isAnswer: boolean }
 
 // The transcript indents a reply's text by two columns, after its bullet.
 const INDENT = 2
@@ -43,12 +45,13 @@ function section(inlineMath: Settings['inline']) {
 let settings: Settings = readSettings({})
 let session: Promise<Drawing> | undefined
 let cache: Promise<string> | undefined
-let colour: { readAt: number; value: Promise<string> } | undefined
+// The last colour that was read to its end. A read that fails or is cut short leaves it standing.
+let colour: { readAt: number; value: string } | undefined
 const formulas = new Map<string, Promise<Formula>>()
 
 // The glyphs are drawn over a transparent background in the colour Claude Code gives a reply's
 // text: a custom theme's `text`, and under a built-in theme the terminal's own foreground.
-async function textColour($: EngineInterface): Promise<string> {
+async function textColour($: EngineInterface): Promise<ColourRead> {
   // The theme's row in /config, which is all the mod needs; the whole settings object can hold secrets.
   const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
   let base = String(theme ?? 'auto')
@@ -59,23 +62,31 @@ async function textColour($: EngineInterface): Promise<string> {
       () => undefined,
     )
     const text = hexColour(custom?.overrides?.text)
-    if (text !== undefined) return text
+    if (text !== undefined) return { value: text, isAnswer: true }
     base = custom?.base ?? 'dark'
   }
+  const guess = base.includes('light') ? '000000' : 'ffffff'
   if ((await $.env.get('TERM_PROGRAM')) === 'ghostty') {
     const config = await $.process.run(['ghostty', '+show-config']).catch(() => undefined)
-    const foreground = hexColour(config?.stdout.match(/^foreground = (#[0-9a-fA-F]{6})$/m)?.[1])
-    if (foreground !== undefined) return foreground
+    if (config === undefined) return { value: guess, isAnswer: false }
+    const foreground = hexColour(config.stdout.match(/^foreground = (#[0-9a-fA-F]{6})$/m)?.[1])
+    if (foreground !== undefined) return { value: foreground, isAnswer: true }
   }
-  return base.includes('light') ? '000000' : 'ffffff'
+  return { value: guess, isAnswer: true }
 }
 
-function currentColour($: EngineInterface): Promise<string> {
-  const now = Date.now()
-  if (colour === undefined || now - colour.readAt > COLOUR_MS) {
-    colour = { readAt: now, value: textColour($).catch(() => 'ffffff') }
+// The colour for one draw, or undefined when the draw's dispatch was abandoned before any colour was known.
+async function currentColour($: EngineInterface, signal: AbortSignal): Promise<string | undefined> {
+  if (colour !== undefined && Date.now() - colour.readAt <= COLOUR_MS) return colour.value
+  const read = await textColour($).catch(() => undefined)
+  // An abandoned dispatch cuts its calls short, and a read cut that way looks like a terminal with
+  // no colour to give. Only a read that was answered, in a dispatch that ran on, is kept.
+  if (read?.isAnswer && !signal.aborted) {
+    colour = { readAt: Date.now(), value: read.value }
+    return read.value
   }
-  return colour.value
+  if (colour !== undefined) return colour.value
+  return signal.aborted ? undefined : (read?.value ?? 'ffffff')
 }
 
 async function cacheDir($: EngineInterface): Promise<string> {
@@ -212,7 +223,8 @@ export const register: Register = (on, options) => {
 
     const { Box, Image, Markdown, Text } = $.ui.resolve(e)
     const room = Math.max(8, (e.viewport?.columns ?? 80) - INDENT - 2)
-    const foreground = await currentColour($)
+    const foreground = await currentColour($, next.signal)
+    if (foreground === undefined) return next(e)
 
     // Every formula is rendered before the tree is built, so the drawing below is synchronous.
     const made = new Map<string, Formula>()
