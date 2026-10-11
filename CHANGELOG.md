@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-11)
 
 ### Added
 
 - The `weight` option in `/config`. `bold` sets every formula in the bold math fonts (`\boldmath`), whose strokes are easier to read on a dark background. A bold picture has a cache file of its own.
+
+### Fixed
+
+- Formulas sometimes came out white next to coloured text. When Claude Code abandoned a draw while the mod was reading the terminal's colour, the mod took white and kept it for 5 seconds. A colour read that fails or is cut short now leaves the last colour in place, and the next draw reads the colour again.
 
 ## 0.3.0 (2026-10-04)
 
