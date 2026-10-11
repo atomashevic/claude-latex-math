@@ -148,16 +148,24 @@ test('options are read with defaults, and numbers are held to their range', () =
     inline: 'image',
     promptSection: true,
     scale: 1,
+    weight: 'normal',
     cacheBytes: 100 * 1024 * 1024,
   })
-  expect(readSettings({ images: 'off', inline: 'unicode', promptSection: false, scale: 9, cacheSizeMB: 0 })).toEqual({
+  expect(
+    readSettings({ images: 'off', inline: 'unicode', promptSection: false, scale: 9, weight: 'bold', cacheSizeMB: 0 }),
+  ).toEqual({
     images: 'off',
     inline: 'unicode',
     promptSection: false,
     scale: 2,
+    weight: 'bold',
     cacheBytes: 1024 * 1024,
   })
-  expect(readSettings({ images: 'sometimes', scale: 'big' })).toMatchObject({ images: 'auto', scale: 1 })
+  expect(readSettings({ images: 'sometimes', scale: 'big', weight: 'heavy' })).toMatchObject({
+    images: 'auto',
+    scale: 1,
+    weight: 'normal',
+  })
 })
 
 test('pictures are drawn where Claude Code draws kitty graphics', () => {
@@ -386,7 +394,14 @@ test('a reply draws display math as images, inline math as one-row images, and t
     { columns: 56, rows: 1 },
   ])
   const display = renders().find(run => run.stdin === '\\[ e^{i\\pi} + 1 = 0 \\]')
-  expect(display?.argv.slice(2)).toEqual([CACHE, stemOf('cdf2e3', '\\[ e^{i\\pi} + 1 = 0 \\]'), 'cdf2e3', 'display', '1'])
+  expect(display?.argv.slice(2)).toEqual([
+    CACHE,
+    stemOf('cdf2e3', '\\[ e^{i\\pi} + 1 = 0 \\]'),
+    'cdf2e3',
+    'display',
+    '1',
+    'normal',
+  ])
   expect(renders().find(run => run.stdin === '\\(\\beta_0\\)')?.argv[5]).toBe('inline')
   // The paragraph around the inline formula is drawn word by word.
   expect(await ui.find({ type: 'Text', text: 'then' })).toBeDefined()
@@ -547,8 +562,20 @@ test('scale=1.5 renders display math larger, in a file of its own', { options: {
     'cdf2e3',
     'display',
     '1.5',
+    'normal',
   ])
   expect(renders().find(run => run.argv[5] === 'inline')?.argv[6]).toBe('1')
+})
+
+test('weight=bold renders every formula bold, in a file of its own', { options: { weight: 'bold' } }, async ($, on) => {
+  const { renders } = machine(on)
+  engineDraws(on)
+  await $.ui.mount({ ...MESSAGE, props: { text: 'For $x$:\n\n$$y$$', isFirstOfReply: true } })
+  expect(renders().map(run => run.argv.slice(3))).toEqual([
+    [stemOf('cdf2e3+bold', '\\(x\\)'), 'cdf2e3', 'inline', '1', 'bold'],
+    [stemOf('cdf2e3+bold', '\\[ y \\]'), 'cdf2e3', 'display', '1', 'bold'],
+  ])
+  expect(stemOf('cdf2e3+bold', '\\[ y \\]')).not.toBe(stemOf('cdf2e3', '\\[ y \\]'))
 })
 
 test('across ssh, the pictures travel as bytes', async ($, on) => {

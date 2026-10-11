@@ -61,6 +61,7 @@ Change the options in `/config`, where each option is one row under the plugin's
 | `inline` | `image`, `unicode` | `image` | How inline math is drawn when images are on. |
 | `promptSection` | `true`, `false` | `true` | Whether the system prompt tells Claude that math is typeset. |
 | `scale` | 0.5 to 2 | 1 | The size of display math, as a multiple of the default size. |
+| `weight` | `normal`, `bold` | `normal` | `bold` sets every formula in the bold math fonts. The heavier strokes are easier to read on a dark background. |
 | `cacheSizeMB` | 1 to 10000 | 100 | The largest size of the image cache, in MB. |
 
 ## What you see
@@ -96,7 +97,7 @@ The mod adds nothing to the system prompt when it writes math as text, in Claude
 1. When a session starts in the terminal, the mod decides once whether to draw images. It reads the terminal from environment variables, as Claude Code does, and runs `bin/render.sh --check` to find missing tools. Then it deletes the least recently used images until the cache is under `cacheSizeMB`.
 2. A hook on each assistant message splits the reply into text, display formulas and inline formulas.
 3. The mod checks each formula against its list of math commands, and sends it to the renderer only when every command is on the list.
-4. `bin/render.sh` runs `latex` and `dvipng` on each formula. It pads the PNG to whole terminal cells and writes it to `~/.cache/claude-latex-math/`. The file name is a hash of the formula, the colour and the scale.
+4. `bin/render.sh` runs `latex` and `dvipng` on each formula. It pads the PNG to whole terminal cells and writes it to `~/.cache/claude-latex-math/`. The file name is a hash of the formula, the colour, the scale and the weight.
 5. The hook draws each PNG with the `Image` element of Claude Code. The terminal reads the file and shows it through the kitty graphics protocol. Over SSH, the terminal cannot read the file, so the mod sends the PNG bytes instead.
 6. A paragraph that has inline math is drawn word by word in a wrapping row, so the image can sit between two words.
 
@@ -130,6 +131,7 @@ The command prints an empty line and exits with 0 when every tool and package is
 - The baseline of an inline formula assumes the metrics of a typical monospace font. The value is `BASELINE` in `bin/render.sh`.
 - After a theme change, a formula that is already on screen keeps its colour until Claude Code draws the message again.
 - The Unicode fallback keeps the LaTeX source of a formula that has an environment or an unknown command.
+- With `weight` set to `bold`, some symbols keep their normal weight, because Computer Modern has no bold version of them: large operators such as a display integral or sum, large delimiters, and the amssymb symbols such as `\mathbb{R}` and `\leqslant`. A symbol in `\bm{...}` or `\boldsymbol{...}` looks the same as one outside it. A bold formula is also about a tenth wider.
 - The mod renders only the math commands of LaTeX, amsmath, amssymb, mathtools and bm. A formula that defines a macro, with `\newcommand` or `\def`, is not rendered.
 - The mod reads the terminal from environment variables. Claude Code also asks the terminal for its version, which a mod cannot do. In a kitty older than 0.28, the mod chooses images, and Claude Code shows each formula as dim LaTeX source.
 
@@ -153,11 +155,11 @@ The mod does not change your prompts, tool calls, permissions or settings.
 
 ### Programs it runs
 
-The mod starts four commands with `$.process.run`. `<plugin>` is the plugin's folder. `<stem>` is the image's file name without `.png`: a hash of the formula, the colour and the scale.
+The mod starts four commands with `$.process.run`. `<plugin>` is the plugin's folder. `<stem>` is the image's file name without `.png`: a hash of the formula, the colour, the scale and the weight.
 
 | Command | When | Why |
 | --- | --- | --- |
-| `bash <plugin>/bin/render.sh <cache folder> <stem> <colour> <display or inline> <scale>` | Once for each new formula | Typesets the formula. The script runs `latex`, `dvipng` and ImageMagick (`magick`, or `convert` and `identify`) in a temporary folder, and deletes the folder when it ends. |
+| `bash <plugin>/bin/render.sh <cache folder> <stem> <colour> <display or inline> <scale> <normal or bold>` | Once for each new formula | Typesets the formula. The script runs `latex`, `dvipng` and ImageMagick (`magick`, or `convert` and `identify`) in a temporary folder, and deletes the folder when it ends. |
 | `bash <plugin>/bin/render.sh --check` | Once when a terminal session starts | Lists missing tools and LaTeX packages. The script runs `command -v` and `kpsewhich`. |
 | `rm -f -- <cache files>` | Once when a terminal session starts, if the cache is over `cacheSizeMB` | Deletes the least recently used images. It deletes only files in the cache folder whose names the renderer made. |
 | `ghostty +show-config` | In Ghostty, at most once every 5 seconds while it draws replies | Reads the terminal's foreground colour. |

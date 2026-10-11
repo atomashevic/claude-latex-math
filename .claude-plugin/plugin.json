@@ -44,6 +44,12 @@
       "description": "A multiple of the default size, from 0.5 to 2.",
       "default": 1
     },
+    "weight": {
+      "type": "string",
+      "title": "Weight of formulas",
+      "description": "normal or bold. bold sets every formula in the bold math fonts, whose heavier strokes are easier to read on a dark background.",
+      "default": "normal"
+    },
     "cacheSizeMB": {
       "type": "number",
       "title": "Picture cache limit in MB",
