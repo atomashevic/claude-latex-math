@@ -39,7 +39,7 @@ Install the tools with one of these commands:
 | --- | --- | --- |
 | Arch Linux | `sudo pacman -S texlive-bin texlive-basic texlive-latex texlive-latexrecommended texlive-latexextra imagemagick` | Yes, with Ghostty 1.3.1 |
 | Debian, Ubuntu | `sudo apt install texlive-latex-recommended dvipng preview-latex-style imagemagick` | The renderer, on Ubuntu 24.04 |
-| macOS | `brew install --cask basictex`, then `sudo tlmgr install dvipng preview mathtools` and `brew install imagemagick` | No |
+| macOS | `brew install --cask basictex`, then `sudo tlmgr install dvipng preview mathtools` and `brew install imagemagick` | Not by the maintainer. A user reports that the mod works on macOS 27 in Ghostty 1.3.1, with TeX Live 2024 and ImageMagick 7 from Homebrew ([#5](https://github.com/atomashevic/claude-latex-math/issues/5)). |
 
 Windows is not supported, because the renderer is a bash script.
 
@@ -105,7 +105,7 @@ On the development machine, a new formula takes about 0.2 seconds and a cached f
 
 ## Troubleshooting
 
-**Formulas show as Unicode text in kitty or Ghostty.** Claude Code draws no images inside tmux or screen, or in a background session, so the mod writes Unicode text there. To make Claude Code draw images anyway, set `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1` in the `env` block of `~/.claude/settings.json` and start a new session. Whether the images then show depends on the terminal. Outside tmux and screen, the mod can also miss a terminal whose `TERM` and `TERM_PROGRAM` were changed. Set `images` to `on` for that terminal.
+**Formulas show as Unicode text in kitty or Ghostty.** Claude Code draws no images inside tmux or screen, or in a background session, so the mod writes Unicode text there. To make Claude Code draw images anyway, set `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1` in the `env` block of `~/.claude/settings.json` and start a new session. Whether the images then show depends on the terminal. The mod is not tested inside tmux. A user reports that the images show in tmux on macOS, in Ghostty, with this variable and `cc-tmux-bridge` from [cc-latex](https://github.com/chang-07/cc-latex) ([#5](https://github.com/atomashevic/claude-latex-math/issues/5)). Outside tmux and screen, the mod can also miss a terminal whose `TERM` and `TERM_PROGRAM` were changed. Set `images` to `on` for that terminal.
 
 **A notice says that a tool was not found.** Install the tools that the notice names, as the table in [Requirements](#requirements) shows, and start a new session. To see what is missing, run the check yourself, with the installed version in the path:
 
