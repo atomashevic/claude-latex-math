@@ -10,6 +10,8 @@ export type Settings = {
   promptSection: boolean
   /** The size of display formulas, as a multiple of the default, from 0.5 to 2. */
   scale: number
+  /** bold: every formula is set in the bold math fonts, whose strokes are heavier. */
+  weight: 'normal' | 'bold'
   /** The largest size of the picture cache, in bytes. */
   cacheBytes: number
 }
@@ -28,6 +30,7 @@ export function readSettings(options: PluginOptions): Settings {
     inline: oneOf(options.inline, ['image', 'unicode'], 'image'),
     promptSection: options.promptSection !== false,
     scale: between(options.scale, 0.5, 2, 1),
+    weight: oneOf(options.weight, ['normal', 'bold'], 'normal'),
     cacheBytes: between(options.cacheSizeMB, 1, 10000, 100) * 1024 * 1024,
   }
 }

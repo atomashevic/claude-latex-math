@@ -16,8 +16,13 @@ size() {
   if command -v magick >/dev/null 2>&1; then magick identify -format '%w %h' "$1"; else identify -format '%w %h' "$1"; fi
 }
 
+# How much of the picture is drawn: the mean of its alpha channel, from 0 to 1.
+ink() {
+  if command -v magick >/dev/null 2>&1; then magick "$1" -format '%[fx:mean.a]' info:; else convert "$1" -format '%[fx:mean.a]' info:; fi
+}
+
 render() {
-  printf '%s' "$1" | bin/render.sh "$cache" "$2" d8d8d8 "${3:-display}" "${4:-1}"
+  printf '%s' "$1" | bin/render.sh "$cache" "$2" d8d8d8 "${3:-display}" "${4:-1}" "${5:-normal}"
 }
 
 missing=$(bin/render.sh --check) || fail "render.sh --check reports missing: $missing"
@@ -28,6 +33,14 @@ read -r c r <<<"$(render '\[ e^{i\pi} + 1 = 0 \]' euler)"
 
 read -r c2 r2 <<<"$(render '\[ e^{i\pi} + 1 = 0 \]' euler-2x display 2)"
 ((c2 >= 2 * c - 1 && r2 >= r)) || fail "scale 2 gives $c2 x $r2 cells for a formula of $c x $r"
+
+read -r cb rb <<<"$(render '\[ e^{i\pi} + 1 = 0 \]' euler-bold display 1 bold)"
+((cb >= c && cb <= c + 2 && rb == r)) || fail "bold gives $cb x $rb cells for a formula of $c x $r"
+LC_ALL=C awk -v bold="$(ink "$cache/euler-bold.png")" -v normal="$(ink "$cache/euler.png")" -v cb="$cb" -v c="$c" \
+  'BEGIN { exit !(bold * cb > 1.2 * normal * c) }' || fail "the bold picture has no more ink than the normal one"
+
+read -r cxb rxb <<<"$(render '\(x\)' x-bold inline 1 bold)"
+((cxb == 1 && rxb == 1)) || fail "a bold single letter takes $cxb x $rxb cells, not 1 x 1"
 
 read -r ci ri <<<"$(render '\(\sum_{j} \alpha_{ij} v_j\)' sum inline)"
 ((ri == 1 && ci >= 3 && ci <= 8)) || fail "an inline sum takes $ci x $ri cells, not 3 to 8 x 1"

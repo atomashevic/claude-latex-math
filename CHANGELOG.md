@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The `weight` option in `/config`. `bold` sets every formula in the bold math fonts (`\boldmath`), whose strokes are easier to read on a dark background. A bold picture has a cache file of its own.
+
 ## 0.3.0 (2026-10-04)
 
 ### Security

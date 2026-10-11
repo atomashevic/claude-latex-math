@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Renders one LaTeX math body (stdin) to a transparent PNG sized to whole terminal cells.
-# usage: render.sh <cache-dir> <stem> <foreground-rrggbb> [display|inline] [scale]
+# usage: render.sh <cache-dir> <stem> <foreground-rrggbb> [display|inline] [scale] [normal|bold]
 #        render.sh --check
 #        render.sh --preamble
 # stdout: "<columns> <rows>"; the PNG is <cache-dir>/<stem>.png. A failure prints the TeX error and exits 1.
 # A display formula takes the rows it needs, at scale times the default size (0.5 to 2). An inline
-# formula takes one row, with its baseline on the text's.
+# formula takes one row, with its baseline on the text's. bold sets the formula in the bold math fonts.
 # --check prints the tools and LaTeX packages that are missing, and exits 1 when any are.
 # --preamble prints the LaTeX preamble of every formula, for tools/commands.py.
 #
@@ -47,7 +47,7 @@ if [[ ${1-} == --check ]]; then
   exit 1
 fi
 
-cache=$1 stem=$2 fg=$3 mode=${4:-display} scale=${5:-1}
+cache=$1 stem=$2 fg=$3 mode=${4:-display} scale=${5:-1} weight=${6:-normal}
 [[ $fg =~ ^[0-9a-fA-F]{6}$ ]] || { echo "not a colour: $fg" >&2; exit 2; }
 [[ $scale =~ ^[0-9]+([.][0-9]+)?$ ]] || scale=1
 res=${LATEX_MATH_RESOLUTION:-1}
@@ -82,6 +82,10 @@ mkdir -p "$cache"
 
 {
   preamble
+  # The bold math version changes the fonts and no command, so the check in hooks/guard.ts holds for it.
+  if [[ $weight == bold ]]; then
+    printf '%s\n' '\AtBeginDocument{\boldmath}'
+  fi
   if [[ $mode == inline ]]; then
     # preview's tight page is what lets dvipng report the formula's height and depth.
     printf '%s\n' '\usepackage[active,tightpage]{preview}\setlength{\PreviewBorder}{0pt}' \

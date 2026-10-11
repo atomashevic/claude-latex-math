@@ -148,9 +148,11 @@ async function render($: EngineInterface, tex: string, foreground: string, mode:
   if (refused !== undefined) return { status: 'failed', reason: refused }
   const dir = await (cache ??= cacheDir($))
   const scale = mode === 'display' ? settings.scale : 1
-  const stem = stemOf(scale === 1 ? foreground : `${foreground}@${scale}`, tex)
+  // The stem names everything that changes the pixels. A default leaves no mark, so its pictures keep their names.
+  const variant = `${foreground}${scale === 1 ? '' : `@${scale}`}${settings.weight === 'bold' ? '+bold' : ''}`
+  const stem = stemOf(variant, tex)
   const ran = await $.process.run(
-    ['bash', `${$.plugin.root}/bin/render.sh`, dir, stem, foreground, mode, String(scale)],
+    ['bash', `${$.plugin.root}/bin/render.sh`, dir, stem, foreground, mode, String(scale), settings.weight],
     { stdin: tex },
   )
   const [columns, rows] = ran.stdout.trim().split(' ').map(Number)
