@@ -110,7 +110,7 @@ On the development machine, a new formula takes about 0.2 seconds and a cached f
 **A notice says that a tool was not found.** Install the tools that the notice names, as the table in [Requirements](#requirements) shows, and start a new session. To see what is missing, run the check yourself, with the installed version in the path:
 
 ```bash
-bash ~/.claude/plugins/cache/claude-latex-math/latex-math/0.3.0/bin/render.sh --check
+bash ~/.claude/plugins/cache/claude-latex-math/latex-math/0.4.0/bin/render.sh --check
 ```
 
 The command prints an empty line and exits with 0 when every tool and package is present.
